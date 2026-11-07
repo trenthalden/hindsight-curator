@@ -1,0 +1,39 @@
+name: hindsight-curator
+version: 0.1.0
+description: >-
+  Bulk-curate stale Hindsight memories from chat: scan by topic, review a dry-run
+  plan, invalidate with a reason, write one checkpoint fact, and restore via a
+  local journal. Separate from the Hindsight memory-provider plugin — talks only
+  to the public HTTP API.
+author: trenthalden
+requires_hermes: ">=0.22.0"
+provides_tools:
+  - curate_scan
+  - curate_plan
+  - curate_apply
+  - curate_restore
+  - curate_checkpoint
+  - curate_history
+provides_hooks: []
+optional_env:
+  - name: HINDSIGHT_API_KEY
+    description: >-
+      Bearer token for the configured Hindsight HTTP API. Omit when the local
+      server has no auth.
+    secret: true
+config_schema:
+  api_url:
+    type: str
+    default: "http://localhost:8888"
+    label: "Hindsight API URL"
+    description: "Base URL of the Hindsight server (local default matches the official provider)."
+  bank_id:
+    type: str
+    default: "hermes"
+    label: "Bank ID"
+    description: "Memory bank to scan and curate."
+tags:
+  - memory
+  - hindsight
+  - curation
+homepage: https://github.com/trenthalden/hindsight-curator

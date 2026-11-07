@@ -44,6 +44,29 @@ def _data_dir() -> Path:
         return root
 
 
+def _settings_from_config_file() -> dict[str, str]:
+    """Read api_url / bank_id from plugins.entries when no PluginContext (dashboard API)."""
+    api_url = DEFAULT_API_URL
+    bank_id = DEFAULT_BANK_ID
+    try:
+        from hermes_cli.config import load_config_readonly
+
+        raw = load_config_readonly() or {}
+        plugins = raw.get("plugins") if isinstance(raw, dict) else None
+        entries = plugins.get("entries") if isinstance(plugins, dict) else None
+        entry = entries.get(PLUGIN_NAME) if isinstance(entries, dict) else None
+        if isinstance(entry, dict):
+            settings = entry.get("settings") or entry.get("config") or {}
+            if isinstance(settings, dict):
+                if settings.get("api_url"):
+                    api_url = str(settings["api_url"])
+                if settings.get("bank_id"):
+                    bank_id = str(settings["bank_id"])
+    except Exception:
+        pass
+    return {"api_url": api_url, "bank_id": bank_id}
+
+
 def _settings_from_ctx(ctx) -> dict[str, Any]:
     if _config_override is not None:
         return dict(_config_override)
@@ -58,6 +81,10 @@ def _settings_from_ctx(ctx) -> dict[str, Any]:
             bank_id = str(ctx.get_config("bank_id", default=DEFAULT_BANK_ID) or DEFAULT_BANK_ID)
         except Exception:
             pass
+    else:
+        file_settings = _settings_from_config_file()
+        api_url = file_settings["api_url"]
+        bank_id = file_settings["bank_id"]
     return {"api_url": api_url.rstrip("/"), "bank_id": bank_id, "api_key": _resolve_api_key()}
 
 

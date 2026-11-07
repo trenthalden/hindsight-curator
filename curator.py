@@ -234,7 +234,42 @@ class Curator:
             "note": "Dry-run only. Call curate_apply(plan_id) to invalidate.",
         }
 
-    def apply(self, plan_id: str) -> dict[str, Any]:
+    def list_plans(self, limit: int = 50) -> dict[str, Any]:
+        return {"ok": True, "plans": self.journal.list_plans(limit=limit)}
+
+    def get_plan(self, plan_id: str) -> dict[str, Any]:
+        plan_id = (plan_id or "").strip()
+        if not plan_id:
+            return {"ok": False, "error": "plan_id is required", "kind": "validation"}
+        plan = self.journal.get_plan(plan_id)
+        if not plan:
+            return {"ok": False, "error": f"Unknown plan_id: {plan_id}", "kind": "not_found"}
+        items = []
+        for it in plan.get("items") or []:
+            kept = bool(it.get("kept"))
+            items.append(
+                {
+                    "id": it["memory_id"],
+                    "excerpt": it.get("text_excerpt") or "",
+                    "type": it.get("fact_type") or "",
+                    "previous_state": it.get("previous_state") or "valid",
+                    "kept": kept,
+                    "locked": kept,
+                }
+            )
+        return {
+            "ok": True,
+            "plan_id": plan["plan_id"],
+            "created_at": plan["created_at"],
+            "reason": plan["reason"],
+            "query": plan.get("query") or "",
+            "status": plan["status"],
+            "count": len(items),
+            "items": items,
+            "apply_events": self.journal.apply_events_for_plan(plan_id),
+        }
+
+    def apply(self, plan_id: str, ids: Optional[Sequence[str]] = None) -> dict[str, Any]:
         plan_id = (plan_id or "").strip()
         if not plan_id:
             return {"ok": False, "error": "plan_id is required", "kind": "validation"}
@@ -245,6 +280,16 @@ class Curator:
             return {"ok": False, "error": f"Plan {plan_id} was already applied", "kind": "conflict"}
 
         targets = self.journal.plan_targets(plan_id)
+        if ids is not None:
+            wanted = {str(x).strip() for x in ids if str(x).strip()}
+            targets = [t for t in targets if t["memory_id"] in wanted]
+            if wanted and not targets:
+                return {
+                    "ok": False,
+                    "error": "No matching apply targets for the given ids "
+                    "(unknown, kept/whitelist, or not in plan)",
+                    "kind": "validation",
+                }
         reason = plan["reason"]
         results: list[dict[str, Any]] = []
         ok_n = not_found_n = failed_n = 0
@@ -297,13 +342,20 @@ class Curator:
             "invalidated": ok_n,
             "not_found": not_found_n,
             "failed": failed_n,
+            "subset": ids is not None,
             "results": results,
         }
         self.journal.log_action(
             "apply",
-            f"Applied {plan_id}: ok={ok_n} not_found={not_found_n} failed={failed_n}",
+            f"Applied {plan_id}: ok={ok_n} not_found={not_found_n} failed={failed_n}"
+            + (f" subset={len(targets)}" if ids is not None else ""),
             plan_id=plan_id,
-            detail={"invalidated": ok_n, "not_found": not_found_n, "failed": failed_n},
+            detail={
+                "invalidated": ok_n,
+                "not_found": not_found_n,
+                "failed": failed_n,
+                "subset": ids is not None,
+            },
         )
         return summary
 

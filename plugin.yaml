@@ -1,10 +1,10 @@
 name: hindsight-curator
-version: 0.1.0
+version: 0.2.0
 description: >-
-  Bulk-curate stale Hindsight memories from chat: scan by topic, review a dry-run
-  plan, invalidate with a reason, write one checkpoint fact, and restore via a
-  local journal. Separate from the Hindsight memory-provider plugin — talks only
-  to the public HTTP API.
+  Bulk-curate stale Hindsight memories from chat or the Desktop Memory curation
+  page: scan by topic, review a dry-run plan, invalidate a selected subset with
+  a reason, write one checkpoint fact, and restore via a local journal. Separate
+  from the Hindsight memory-provider plugin — talks only to the public HTTP API.
 author: trenthalden
 requires_hermes: ">=0.22.0"
 provides_tools:

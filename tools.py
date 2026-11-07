@@ -99,7 +99,9 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "name": "curate_apply",
         "description": (
             "Apply a previously created plan: PATCH each target to state=invalidated. "
-            "Continues on per-item failures; journals every result for restore."
+            "Optional ids limits the apply to a subset of non-kept plan targets "
+            "(Desktop checkbox selection). Continues on per-item failures; "
+            "journals every result for restore."
         ),
         "parameters": {
             "type": "object",
@@ -107,6 +109,14 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "plan_id": {
                     "type": "string",
                     "description": "Plan id returned by curate_plan.",
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional subset of memory ids to invalidate. Omit to apply "
+                        "all non-kept targets. Kept/whitelist ids are always skipped."
+                    ),
                 },
             },
             "required": ["plan_id"],
@@ -200,7 +210,8 @@ def make_handlers(get_curator: Callable[[], Any]) -> dict[str, Callable[[dict], 
 
     def curate_apply(args: dict) -> str:
         c = get_curator()
-        return _dumps(c.apply(str(args.get("plan_id") or "")))
+        ids = _as_list(args.get("ids")) if "ids" in args else None
+        return _dumps(c.apply(str(args.get("plan_id") or ""), ids=ids))
 
     def curate_restore(args: dict) -> str:
         c = get_curator()

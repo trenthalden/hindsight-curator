@@ -175,12 +175,38 @@ class Journal:
         self._conn.commit()
         return plan_id
 
+    def list_plans(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT plan_id, created_at, reason, query, status, payload_json FROM plans "
+            "ORDER BY created_at DESC LIMIT ?",
+            (max(1, min(int(limit), 200)),),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            try:
+                payload = json.loads(r["payload_json"] or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            out.append(
+                {
+                    "plan_id": r["plan_id"],
+                    "created_at": r["created_at"],
+                    "reason": r["reason"],
+                    "query": r["query"] or "",
+                    "status": r["status"],
+                    "count": int(payload.get("count") or 0),
+                    "kept": len(payload.get("kept") or []),
+                }
+            )
+        return out
+
     def get_plan(self, plan_id: str) -> Optional[dict[str, Any]]:
         row = self._conn.execute("SELECT * FROM plans WHERE plan_id=?", (plan_id,)).fetchone()
         if not row:
             return None
         items = self._conn.execute(
-            "SELECT memory_id, previous_state, text_excerpt, fact_type, kept FROM plan_items WHERE plan_id=?",
+            "SELECT memory_id, previous_state, text_excerpt, fact_type, kept FROM plan_items "
+            "WHERE plan_id=? ORDER BY kept ASC, memory_id",
             (plan_id,),
         ).fetchall()
         return {

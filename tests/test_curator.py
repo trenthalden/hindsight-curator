@@ -135,12 +135,63 @@ class CuratorTests(unittest.TestCase):
         applied = self.curator.apply(plan["plan_id"])
         self.assertTrue(applied["ok"])
         self.assertGreaterEqual(applied["invalidated"], 1)
+        self.assertFalse(applied.get("subset"))
         self.assertEqual(self.state.memories["m_stale_model"]["state"], "invalidated")
 
         restored = self.curator.restore(plan_id=plan["plan_id"])
         self.assertTrue(restored["ok"])
         self.assertGreaterEqual(restored["restored"], 1)
         self.assertEqual(self.state.memories["m_stale_model"]["state"], "valid")
+
+    def test_apply_subset_ids(self) -> None:
+        """curate_apply(plan_id, ids?) invalidates only the selected non-kept targets."""
+        plan = self.curator.plan(
+            candidate_ids=["m_stale_window", "m_stale_model", "m_other"],
+            reason="subset apply demo",
+            keep=["m_other"],
+        )
+        self.assertTrue(plan["ok"])
+        self.assertEqual(plan["to_invalidate"], 2)
+        plan_id = plan["plan_id"]
+
+        applied = self.curator.apply(plan_id, ids=["m_stale_window"])
+        self.assertTrue(applied["ok"], applied)
+        self.assertTrue(applied.get("subset"))
+        self.assertEqual(applied["invalidated"], 1)
+        by_id = {r["id"]: r["result"] for r in applied["results"]}
+        self.assertEqual(by_id, {"m_stale_window": "ok"})
+        self.assertEqual(self.state.memories["m_stale_window"]["state"], "invalidated")
+        self.assertEqual(self.state.memories["m_stale_model"]["state"], "valid")
+        self.assertEqual(self.state.memories["m_other"]["state"], "valid")
+
+        # Kept / whitelist ids are ignored even if requested.
+        plan2 = self.curator.plan(
+            candidate_ids=["m_stale_model", "m_keep_pref"],
+            reason="subset keep guard",
+            keep=["m_keep_pref"],
+        )
+        bad = self.curator.apply(plan2["plan_id"], ids=["m_keep_pref"])
+        self.assertFalse(bad["ok"])
+        self.assertEqual(bad["kind"], "validation")
+        self.assertEqual(self.state.memories["m_keep_pref"]["state"], "valid")
+
+        # Omitting ids still applies every non-kept target (backward compatible).
+        full = self.curator.apply(plan2["plan_id"])
+        self.assertTrue(full["ok"], full)
+        self.assertFalse(full.get("subset"))
+        self.assertEqual(self.state.memories["m_stale_model"]["state"], "invalidated")
+        self.assertEqual(self.state.memories["m_keep_pref"]["state"], "valid")
+
+    def test_list_and_get_plan(self) -> None:
+        plan = self.curator.plan(query="Tuesday", reason="schedule review", keep=["m_keep_pref"])
+        self.assertTrue(plan["ok"])
+        listed = self.curator.list_plans()
+        self.assertTrue(listed["ok"])
+        self.assertTrue(any(p["plan_id"] == plan["plan_id"] for p in listed["plans"]))
+        detail = self.curator.get_plan(plan["plan_id"])
+        self.assertTrue(detail["ok"])
+        locked = {i["id"]: i["locked"] for i in detail["items"]}
+        self.assertTrue(any(not v for v in locked.values()))
 
     def test_apply_partial_failure(self) -> None:
         self.state.fail_ids.add("m_stale_model")

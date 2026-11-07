@@ -112,9 +112,10 @@ class E2EToolHandlerTests(unittest.TestCase):
         self.assertGreaterEqual(plan["to_invalidate"], 1)
         plan_id = plan["plan_id"]
 
-        applied = self._call("curate_apply", {"plan_id": plan_id})
+        applied = self._call("curate_apply", {"plan_id": plan_id, "ids": ["e2e_stale_model"]})
         self.assertTrue(applied["ok"], applied)
-        self.assertGreaterEqual(applied["invalidated"], 1)
+        self.assertTrue(applied.get("subset"))
+        self.assertEqual(applied["invalidated"], 1)
         self.assertEqual(self.state.memories["e2e_stale_model"]["state"], "invalidated")
         self.assertEqual(self.state.memories["e2e_keep"]["state"], "valid")
 

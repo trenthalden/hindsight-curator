@@ -1,6 +1,6 @@
 # hindsight-curator
 
-Find stale or contradicted Hindsight memories by topic, review a dry-run plan, invalidate them in bulk with a reason, write one checkpoint fact, and roll everything back — from chat.
+Find stale or contradicted Hindsight memories by topic, review a dry-run plan, invalidate them in bulk (or a selected subset) with a reason, write one checkpoint fact, and roll everything back — from chat or the Desktop **Memory curation** page.
 
 Hindsight’s own UI retires one fact at a time. This is a **separate** Hermes plugin on top of the public HTTP API; it does **not** replace or patch the official `hindsight` memory-provider plugin.
 
@@ -33,11 +33,23 @@ python scripts/seed_demo_bank.py --url http://127.0.0.1:8888 --bank demo-curator
 |---------|----------------|
 | `curate_scan(query, since?, until?, types?, limit?)` | List candidate memories (id, excerpt, date, type) |
 | `curate_plan(query \| candidate_ids, reason, keep?)` | Store a **dry-run** plan (counts + sample); no PATCH |
-| `curate_apply(plan_id)` | Invalidate plan targets; per-item ok / not_found / failed |
+| `curate_apply(plan_id, ids?)` | Invalidate plan targets (optional id subset); per-item ok / not_found / failed |
 | `curate_restore(plan_id \| memory_ids)` | Restore journaled previous states |
 | `curate_checkpoint(text, context?)` | Retain one current-truth fact (`state:current`) |
 | `curate_history(limit?)` | Local journal of plans / applies / restores / checkpoints |
 | `/memory-curate` | `scan` · `plan` · `apply` · `restore` · `history` |
+| Desktop **Memory curation** | Plan list + checkboxes → Apply selected / Restore / Refresh |
+
+> Note: applying a subset marks the plan as applied; to invalidate the remaining items, create a new plan.
+
+
+## Desktop
+
+Unified package: enable both the **agent** half (tools + dashboard API) and the **Desktop** half in **Capabilities → Plugins**, then **Rescan** if needed. Open **Memory curation** from the sidebar (route `/memory-curation`).
+
+![Memory curation page — screenshot placeholder](docs/screenshots/memory-curation.png)
+
+The page lists stored plans (id, query, reason, count, status), shows candidate memories with checkboxes (pre-checked; whitelist/kept rows locked), and supports **Apply selected**, **Restore**, and **Refresh**. Per-item results appear after apply/restore. Data flows through `ctx.rest` to `dashboard/plugin_api.py` (no DOM poking of core UI).
 
 ## Data & network disclosure
 
@@ -52,7 +64,7 @@ python scripts/seed_demo_bank.py --url http://127.0.0.1:8888 --bank demo-curator
 
 - Observations are derived; plans auto-skip them (Hindsight rejects observation PATCH).
 - Candidate matching is keyword/regex (+ optional date/type filters), not semantic recall.
-- Desktop plan-review page is not shipped in this version (OPEN).
+- Desktop page needs the agent half enabled so the dashboard API mounts; treat as best-effort until verified in a live Desktop window.
 - Requires a reachable Hindsight HTTP API; does not embed or start a server.
 
 ## Development

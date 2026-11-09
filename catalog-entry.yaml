@@ -1,20 +1,22 @@
 name: hindsight-curator
 repo: https://github.com/trenthalden/hindsight-curator
 sha: TBD
-version: "0.2.0"
+version: "0.2.1"
 description: >-
   Bulk-curate stale Hindsight memories from chat via /memory-curate or tools,
-  or from the Desktop Memory curation page: scan by topic (keyword/regex),
-  review a dry-run plan, invalidate a selected subset with a reason, write one
-  checkpoint fact, and restore via a local SQLite journal. Separate from the
-  official hindsight memory-provider plugin — talks only to the public HTTP API.
-  Disclosure — network calls only to the configured Hindsight base URL (list,
-  GET, PATCH invalidate/restore, retain checkpoint); optional Bearer auth via
-  HINDSIGHT_API_KEY through Hermes secrets; writes invalidations, restores, and
-  one checkpoint fact to that server; stores plans/apply events/whitelist/history
-  in the profile plugin-data directory; Desktop half uses ctx.rest to the plugin
-  dashboard API; no shell, no background daemons, does not read other plugins'
-  config or credential files.
+  or from the Desktop Memory curation page: keyword/regex scan, the agent reads
+  each match and plans only verified-stale ids (coincidental hits recorded as
+  skipped / left untouched), waits for the owner's explicit OK, invalidates,
+  writes one checkpoint fact in the owner's words, and restores via a local
+  SQLite journal. Bundles the memory-curate skill (hindsight-curator:memory-curate).
+  Separate from the official hindsight memory-provider plugin — talks only to the
+  public HTTP API. Disclosure — network calls only to the configured Hindsight
+  base URL (list, GET, PATCH invalidate/restore, retain checkpoint); optional
+  Bearer auth via HINDSIGHT_API_KEY through Hermes secrets; writes invalidations,
+  restores, and one checkpoint fact to that server; stores plans/apply
+  events/whitelist/history/skipped reasons in the profile plugin-data directory;
+  Desktop half uses ctx.rest to the plugin dashboard API; no shell, no background
+  daemons, does not read other plugins' config or credential files.
 maintainer: trenthalden
 tier: community
 category: tools

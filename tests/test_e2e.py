@@ -24,6 +24,7 @@ class _FakeCtx:
         self._settings = settings
         self.tools: dict[str, Any] = {}
         self.commands: dict[str, Any] = {}
+        self.skills: dict[str, Any] = {}
 
     def get_config(self, key: str, default: Any = None) -> Any:
         return self._settings.get(key, default)
@@ -33,6 +34,9 @@ class _FakeCtx:
 
     def register_command(self, name: str, handler=None, description: str = "", args_hint: str = "", **_kwargs) -> None:
         self.commands[name] = {"handler": handler, "description": description, "args_hint": args_hint}
+
+    def register_skill(self, name: str, path=None, **_kwargs) -> None:
+        self.skills[name] = path
 
 
 class E2EToolHandlerTests(unittest.TestCase):
@@ -80,6 +84,7 @@ class E2EToolHandlerTests(unittest.TestCase):
         self.plugin.register(self.ctx)
         self.assertIn("curate_scan", self.ctx.tools)
         self.assertIn("memory-curate", self.ctx.commands)
+        self.assertIn("memory-curate", self.ctx.skills)
 
     def tearDown(self) -> None:
         self.plugin.reset_curator()
@@ -155,6 +160,29 @@ class E2EToolHandlerTests(unittest.TestCase):
         hist_out = handler("history 5")
         hist = json.loads(hist_out)
         self.assertTrue(hist["ok"])
+
+    def test_tool_plan_with_skipped_backward_compat(self) -> None:
+        # Agent path with skipped
+        plan = self._call(
+            "curate_plan",
+            {
+                "candidate_ids": ["e2e_stale_192k"],
+                "skipped": [{"id": "e2e_keep", "why": "owner preference"}],
+                "reason": "window → 1M",
+            },
+        )
+        self.assertTrue(plan["ok"], plan)
+        self.assertEqual(plan["to_invalidate"], 1)
+        self.assertEqual(plan["skipped"][0]["id"], "e2e_keep")
+        self.assertEqual(self.state.patch_calls, [])
+
+        # Backward compatible: no skipped key
+        plan2 = self._call(
+            "curate_plan",
+            {"candidate_ids": ["e2e_stale_model"], "reason": "model change"},
+        )
+        self.assertTrue(plan2["ok"], plan2)
+        self.assertEqual(plan2.get("skipped"), [])
 
 
 if __name__ == "__main__":

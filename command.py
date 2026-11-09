@@ -16,7 +16,17 @@ HELP = """\
   restore <plan_id>
   history [limit]
 
-Dry-run is the default: `plan` never PATCHes. `apply` requires an explicit plan id.
+How it works (agent chat):
+  1. curate_scan — keyword matches only (NOT verified)
+  2. Read each excerpt; classify stale vs coincidental vs keep
+  3. curate_plan with candidate_ids (verified stale) + skipped=[{id, why}]
+  4. Show the owner a short invalidate / left-untouched table
+  5. Wait for explicit OK — then curate_apply (never before)
+  6. curate_checkpoint with the new fact in the owner's words
+  7. Offer curate_restore if they want to undo
+
+CLI `plan <query>` still builds a keyword dry-run plan (no PATCH).
+`apply` requires an explicit plan id AND owner confirmation in chat.
 """
 
 

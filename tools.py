@@ -28,13 +28,43 @@ def _as_list(value: Any) -> Optional[list[str]]:
     return [str(value)]
 
 
+def _as_skipped(value: Any) -> Optional[list[dict[str, str]]]:
+    """Normalize optional skipped=[{id, why}, ...] from tool args (list or JSON string)."""
+    if value is None or value == "":
+        return None
+    raw = value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, list):
+        return None
+    out: list[dict[str, str]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            mid = str(item.get("id") or item.get("memory_id") or "").strip()
+            why = str(item.get("why") or item.get("reason") or "").strip()
+            if mid:
+                out.append({"id": mid, "why": why or "coincidental match"})
+        elif isinstance(item, str) and item.strip():
+            out.append({"id": item.strip(), "why": "coincidental match"})
+    return out or None
+
+
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "curate_scan": {
         "name": "curate_scan",
         "description": (
-            "Scan the configured Hindsight bank for memories matching a topic query "
-            "(keyword or /regex/i). Returns candidate id, text excerpt, date, and type. "
-            "Does not modify any memories."
+            "Keyword/regex SEARCH only — results are unverified matches, NOT confirmed stale "
+            "facts. You MUST read each candidate excerpt (and full text when needed) and classify: "
+            "stale (states the outdated fact) vs coincidental (same tokens for a file size, row "
+            "count, price, etc.) vs keep (still true / owner preference). Do not invalidate from "
+            "scan alone. Pass only verified-stale ids to curate_plan via candidate_ids; record "
+            "coincidental matches in skipped."
         ),
         "parameters": {
             "type": "object",
@@ -66,21 +96,43 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "curate_plan": {
         "name": "curate_plan",
         "description": (
-            "Build a dry-run invalidation plan from a query or explicit candidate ids. "
-            "Respects the whitelist and optional keep ids. Does not PATCH anything — "
-            "call curate_apply(plan_id) to execute."
+            "Build a dry-run invalidation plan. Agent path: pass candidate_ids with ONLY memories "
+            "you verified as stating the outdated fact, plus optional skipped=[{id, why}] for "
+            "coincidental keyword hits left untouched. Query path (no candidate_ids) remains for "
+            "/memory-curate and still scans by keyword. Does not PATCH — show the owner a short "
+            "table (invalidate vs left untouched) and wait for explicit OK before curate_apply."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Topic query (used when candidate_ids omitted).",
+                    "description": "Topic query (used when candidate_ids omitted; /memory-curate path).",
                 },
                 "candidate_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Explicit memory ids to include in the plan.",
+                    "description": (
+                        "Verified-stale memory ids only (agent path). Do not include coincidental matches."
+                    ),
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string", "description": "Memory id left untouched."},
+                            "why": {
+                                "type": "string",
+                                "description": "Short reason (e.g. file size, row count, price).",
+                            },
+                        },
+                        "required": ["id", "why"],
+                    },
+                    "description": (
+                        "Coincidental matches left untouched: [{id, why}]. Stored on the plan and "
+                        "shown as 'left untouched: why'."
+                    ),
                 },
                 "reason": {
                     "type": "string",
@@ -99,6 +151,8 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "name": "curate_apply",
         "description": (
             "Apply a previously created plan: PATCH each target to state=invalidated. "
+            "Call ONLY after the owner explicitly confirmed this plan in the conversation "
+            "(e.g. 'yes', 'apply it', 'OK'). Never apply on the same turn you first show the plan. "
             "Optional ids limits the apply to a subset of non-kept plan targets "
             "(Desktop checkbox selection). Continues on per-item failures; "
             "journals every result for restore."
@@ -143,15 +197,15 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "curate_checkpoint": {
         "name": "curate_checkpoint",
         "description": (
-            "Retain one consolidated current-truth fact into the Hindsight bank "
-            "(tagged state:current). Use after invalidating stale memories."
+            "After a successful apply, save the new current truth in the owner's words "
+            "(tagged state:current). Prefer the owner's phrasing of the updated fact."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "Verified current-state fact to retain.",
+                    "description": "Verified current-state fact to retain (prefer owner's wording).",
                 },
                 "context": {
                     "type": "string",
@@ -205,6 +259,7 @@ def make_handlers(get_curator: Callable[[], Any]) -> dict[str, Callable[[dict], 
                 candidate_ids=_as_list(args.get("candidate_ids")),
                 reason=str(args.get("reason") or ""),
                 keep=_as_list(args.get("keep")),
+                skipped=_as_skipped(args.get("skipped")),
             )
         )
 

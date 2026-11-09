@@ -270,6 +270,73 @@ class CuratorTests(unittest.TestCase):
         self.assertIn("plan", actions)
         self.assertIn("apply", actions)
 
+    def test_plan_skipped_left_untouched(self) -> None:
+        """Agent path: verified stale ids + skipped coincidental matches."""
+        self.state.seed(
+            [
+                {
+                    "id": "m_decoy_rows",
+                    "text": "The exported dataset has 192K rows.",
+                    "fact_type": "world",
+                    "created_at": "2026-09-04T00:00:00Z",
+                }
+            ]
+        )
+        plan = self.curator.plan(
+            candidate_ids=["m_stale_window"],
+            skipped=[{"id": "m_decoy_rows", "why": "row count, not context window"}],
+            reason="window upgraded to 1M",
+        )
+        self.assertTrue(plan["ok"], plan)
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan["to_invalidate"], 1)
+        self.assertEqual(len(plan["skipped"]), 1)
+        self.assertEqual(plan["skipped"][0]["id"], "m_decoy_rows")
+        self.assertIn("row count", plan["left_untouched"][0]["why"])
+        self.assertIn("m_decoy_rows", plan["kept_ids"])
+
+        detail = self.curator.get_plan(plan["plan_id"])
+        self.assertTrue(detail["ok"])
+        self.assertEqual(len(detail["left_untouched"]), 1)
+        by_id = {i["id"]: i for i in detail["items"]}
+        self.assertTrue(by_id["m_decoy_rows"]["left_untouched"])
+        self.assertEqual(by_id["m_decoy_rows"]["why"], "row count, not context window")
+
+        applied = self.curator.apply(plan["plan_id"])
+        self.assertTrue(applied["ok"])
+        self.assertEqual(self.state.memories["m_stale_window"]["state"], "invalidated")
+        self.assertEqual(self.state.memories["m_decoy_rows"]["state"], "valid")
+
+    def test_plan_skipped_overrides_candidate_ids(self) -> None:
+        """If an id is both candidate and skipped, it stays valid (coincidental wins)."""
+        plan = self.curator.plan(
+            candidate_ids=["m_stale_window", "m_stale_model"],
+            skipped=[{"id": "m_stale_model", "why": "false positive for this demo"}],
+            reason="careful classify",
+        )
+        self.assertTrue(plan["ok"])
+        self.assertEqual(plan["to_invalidate"], 1)
+        applied = self.curator.apply(plan["plan_id"])
+        self.assertTrue(applied["ok"])
+        self.assertEqual(self.state.memories["m_stale_window"]["state"], "invalidated")
+        self.assertEqual(self.state.memories["m_stale_model"]["state"], "valid")
+
+    def test_plan_query_path_backward_compatible(self) -> None:
+        """Query path (no candidate_ids / skipped) still works for /memory-curate."""
+        plan = self.curator.plan(query="context window", reason="legacy slash path")
+        self.assertTrue(plan["ok"])
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan.get("skipped"), [])
+        self.assertGreaterEqual(plan["to_invalidate"], 1)
+        # Observations auto-kept
+        self.assertIn("m_obs", plan["kept_ids"])
+
+    def test_scan_marks_unverified(self) -> None:
+        out = self.curator.scan("192K")
+        self.assertTrue(out["ok"])
+        self.assertTrue(out.get("unverified"))
+        self.assertIn("Keyword", out.get("note") or "")
+
 
 if __name__ == "__main__":
     unittest.main()

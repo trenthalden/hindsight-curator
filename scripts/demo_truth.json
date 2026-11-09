@@ -1,0 +1,75 @@
+{
+  "topic": "context window upgrade 192K → 1M",
+  "query_hints": ["192K", "192k", "/192\\s*[kK]/"],
+  "stale": [
+    {
+      "id": "demo_stale_window",
+      "text": "Our model's context window is 192K tokens."
+    },
+    {
+      "id": "demo_stale_prompts",
+      "text": "Keep prompts under 192K so the agent does not truncate mid-turn."
+    },
+    {
+      "id": "demo_stale_rag",
+      "text": "192k window limits RAG chunks to roughly 8K tokens each in the indexer."
+    },
+    {
+      "id": "demo_stale_budget",
+      "text": "Token budget warnings fire at 180K of the 192K context window."
+    },
+    {
+      "id": "demo_stale_experiment",
+      "text": "The long-context experiment still needs a 192K window for the baseline run."
+    },
+    {
+      "id": "demo_stale_docs",
+      "text": "Project docs say the chat model ships with a 192K context window."
+    }
+  ],
+  "decoy": [
+    {
+      "id": "demo_decoy_rows",
+      "text": "The exported dataset has 192K rows after deduplication.",
+      "why": "row count, not context window"
+    },
+    {
+      "id": "demo_decoy_logo",
+      "text": "logo.png is 192K on disk; keep it under the asset budget.",
+      "why": "file size, not context window"
+    },
+    {
+      "id": "demo_decoy_usd",
+      "text": "Cloud spend budget: 192K USD per year for inference.",
+      "why": "money budget, not context window"
+    }
+  ],
+  "keep": [
+    {
+      "id": "demo_keep_pref",
+      "text": "Owner preference: when summarizing long threads, remind me if we are near the old 192K habit even after the upgrade — I still paste huge logs.",
+      "why": "owner preference that mentions 192K on purpose"
+    }
+  ],
+  "other": [
+    {
+      "id": "demo_other_tuesday",
+      "text": "Deployments are reviewed on Tuesday evenings."
+    },
+    {
+      "id": "demo_other_journal",
+      "text": "Curation plans are dry-run until apply is called with a plan id."
+    },
+    {
+      "id": "demo_other_sqlite",
+      "text": "SQLite journaling lives in the plugin data directory."
+    }
+  ],
+  "checkpoint_must_contain": ["1M"],
+  "expect_after_apply": {
+    "stale_state": "invalidated",
+    "decoy_state": "valid",
+    "keep_state": "valid",
+    "other_state": "valid"
+  }
+}

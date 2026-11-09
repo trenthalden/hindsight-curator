@@ -48,12 +48,15 @@ function PlanList({ plans, selectedId, onSelect }) {
         h('div', { className: 'mt-0.5 truncate text-muted-foreground' },
           p.query || '(no query)', ' · ', p.reason || ''),
         h('div', { className: 'text-muted-foreground' },
-          `${p.count ?? 0} candidate(s)`, p.kept ? ` · ${p.kept} kept` : ''))
+          `${p.count ?? 0} candidate(s)`,
+          p.kept ? ` · ${p.kept} kept` : '',
+          p.skipped ? ` · ${p.skipped} left untouched` : ''))
     }))
 }
 
 function CandidateRow({ item, checked, onToggle, result }) {
   const locked = !!item.locked
+  const left = !!item.left_untouched || !!(item.why && item.kept)
   return h('label', {
     className: `flex items-start gap-2 rounded border border-border/50 px-2 py-1.5 text-xs ${
       locked ? 'opacity-70' : ''
@@ -69,12 +72,18 @@ function CandidateRow({ item, checked, onToggle, result }) {
     h('div', { className: 'min-w-0 flex-1' },
       h('div', { className: 'flex items-center gap-2' },
         h('span', { className: 'font-mono text-[11px]' }, item.id),
-        item.kept
-          ? h('span', { className: 'text-[10px] uppercase tracking-wide text-muted-foreground' }, 'whitelist')
-          : null,
+        left
+          ? h('span', { className: 'text-[10px] uppercase tracking-wide text-muted-foreground' }, 'left untouched')
+          : item.kept
+            ? h('span', { className: 'text-[10px] uppercase tracking-wide text-muted-foreground' }, 'whitelist')
+            : null,
         h('span', { className: 'ml-auto' }, h(ResultBadge, { result }))),
       h('div', { className: 'text-muted-foreground' },
-        item.type ? `${item.type} · ` : '', item.excerpt || '(empty)')))
+        item.type ? `${item.type} · ` : '', item.excerpt || '(empty)'),
+      left && item.why
+        ? h('div', { className: 'mt-0.5 text-[11px] text-muted-foreground' },
+            'left untouched: ', item.why)
+        : null))
 }
 
 function Page({ ctx }) {
@@ -255,6 +264,16 @@ function Page({ ctx }) {
                   disabled: busy || !selectedId,
                   onClick: onRestore,
                 }, 'Restore')),
+              (detail.left_untouched || []).length
+                ? h('div', { className: 'rounded border border-border/50 bg-muted/20 px-2 py-1.5 text-xs' },
+                    h('div', { className: 'text-[11px] font-semibold uppercase tracking-wide text-muted-foreground' },
+                      'Left untouched'),
+                    ...(detail.left_untouched || []).map(s => h('div', {
+                      key: s.id,
+                      className: 'mt-0.5 text-muted-foreground',
+                    }, h('span', { className: 'font-mono text-[11px]' }, s.id),
+                      ': ', s.why || '(no reason)')))
+                : null,
               h('div', { className: 'space-y-1' },
                 ...(detail.items || []).map(item => h(CandidateRow, {
                   key: item.id,

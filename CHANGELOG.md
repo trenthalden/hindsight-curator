@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 — 2026-11-09
+
+- Agent verifies each scan hit before retiring: `curate_scan` is keyword-only /
+  unverified; `curate_plan` accepts `candidate_ids` (verified stale) plus optional
+  `skipped: [{id, why}]` for coincidental matches (stored on the plan, shown as
+  left untouched in plan output and on the Desktop page).
+- `curate_apply` description requires the owner's explicit confirmation first;
+  `curate_checkpoint` saves the new truth in the owner's words after apply.
+- Bundled skill `hindsight-curator:memory-curate` teaches scan → classify → plan
+  with skipped → owner table → wait for OK → apply → checkpoint → offer restore.
+- Demo bank + `scripts/demo_truth.json`, standalone `scripts/fake_hindsight.py`,
+  and `scripts/live_eval.py` (real Hermes LLM on profile hcdemo + fake server).
+
 ## 0.2.0 — 2026-11-07
 
 - Desktop **Memory curation** page (`desktop/plugin.js`): list plans, review candidates with checkboxes (whitelist locked), Apply selected / Restore / Refresh, per-item results.

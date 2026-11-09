@@ -143,14 +143,27 @@ class Journal:
         query: Optional[str],
         items: list[dict[str, Any]],
         kept_ids: set[str],
+        skipped: Optional[list[dict[str, str]]] = None,
     ) -> str:
         plan_id = f"plan_{uuid.uuid4().hex[:12]}"
         now = _utc_now()
+        skipped_norm: list[dict[str, str]] = []
+        for row in skipped or []:
+            mid = str(row.get("id") or "").strip()
+            if not mid:
+                continue
+            skipped_norm.append(
+                {
+                    "id": mid,
+                    "why": str(row.get("why") or "coincidental match").strip() or "coincidental match",
+                }
+            )
         payload = {
             "reason": reason,
             "query": query,
             "count": len(items),
             "kept": sorted(kept_ids),
+            "skipped": skipped_norm,
             "sample": items[:5],
         }
         self._conn.execute(
@@ -171,7 +184,14 @@ class Journal:
                     1 if mid in kept_ids else 0,
                 ),
             )
-        self._log(now, "plan", plan_id, f"Dry-run plan {plan_id}: {len(items)} candidate(s), {len(kept_ids)} kept", payload)
+        self._log(
+            now,
+            "plan",
+            plan_id,
+            f"Dry-run plan {plan_id}: {len(items)} candidate(s), {len(kept_ids)} kept, "
+            f"{len(skipped_norm)} left untouched",
+            payload,
+        )
         self._conn.commit()
         return plan_id
 
@@ -187,6 +207,7 @@ class Journal:
                 payload = json.loads(r["payload_json"] or "{}")
             except json.JSONDecodeError:
                 payload = {}
+            skipped = payload.get("skipped") or []
             out.append(
                 {
                     "plan_id": r["plan_id"],
@@ -196,6 +217,7 @@ class Journal:
                     "status": r["status"],
                     "count": int(payload.get("count") or 0),
                     "kept": len(payload.get("kept") or []),
+                    "skipped": len(skipped) if isinstance(skipped, list) else 0,
                 }
             )
         return out

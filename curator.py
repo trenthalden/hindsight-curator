@@ -154,6 +154,11 @@ class Curator:
                 "count": len(collected),
                 "scanned": total_seen,
                 "candidates": collected,
+                "unverified": True,
+                "note": (
+                    "Keyword matches only — not verified. Read each excerpt and classify "
+                    "before curate_plan (candidate_ids = verified stale; skipped = coincidental)."
+                ),
             }
         except HindsightError as exc:
             return exc.as_dict()
@@ -165,12 +170,25 @@ class Curator:
         candidate_ids: Optional[Sequence[str]] = None,
         reason: str,
         keep: Optional[Sequence[str]] = None,
+        skipped: Optional[Sequence[dict[str, Any]]] = None,
     ) -> dict[str, Any]:
         reason = (reason or "").strip()
         if not reason:
             return {"ok": False, "error": "reason is required", "kind": "validation"}
 
         keep_ids = {str(x).strip() for x in (keep or []) if str(x).strip()}
+        skipped_list: list[dict[str, str]] = []
+        for row in skipped or []:
+            if not isinstance(row, dict):
+                continue
+            mid = str(row.get("id") or row.get("memory_id") or "").strip()
+            if not mid:
+                continue
+            why = str(row.get("why") or row.get("reason") or "").strip() or "coincidental match"
+            skipped_list.append({"id": mid, "why": why})
+        skipped_ids = {s["id"] for s in skipped_list}
+        # Coincidental matches must not be invalidated even if also listed in candidate_ids.
+        keep_ids |= skipped_ids
         items: list[dict[str, Any]] = []
 
         try:
@@ -198,6 +216,29 @@ class Curator:
                     "error": "Provide query or candidate_ids",
                     "kind": "validation",
                 }
+
+            # Resolve skipped ids that are not already among plan items (for display / payload).
+            known = {m["id"] for m in items}
+            for sid in skipped_ids - known:
+                try:
+                    raw = self.client.get_memory(sid)
+                    mem = _memory_fields(raw if isinstance(raw, dict) else {"id": sid})
+                    items.append(mem)
+                except HindsightError as exc:
+                    if exc.kind == "not_found":
+                        items.append(
+                            {
+                                "id": sid,
+                                "text": "",
+                                "excerpt": "",
+                                "fact_type": "",
+                                "type": "",
+                                "state": "valid",
+                                "date": "",
+                            }
+                        )
+                    else:
+                        return exc.as_dict()
         except HindsightError as exc:
             return exc.as_dict()
 
@@ -216,6 +257,7 @@ class Curator:
             query=query if query is not None else None,
             items=items,
             kept_ids=keep_ids,
+            skipped=skipped_list,
         )
         targets = [m for m in items if m["id"] not in keep_ids]
         return {
@@ -227,11 +269,18 @@ class Curator:
             "to_invalidate": len(targets),
             "kept": len(keep_ids),
             "kept_ids": sorted(keep_ids),
+            "skipped": skipped_list,
+            "left_untouched": [
+                {"id": s["id"], "why": s["why"]} for s in skipped_list
+            ],
             "sample": [
                 {"id": m["id"], "excerpt": m.get("excerpt") or _excerpt(m.get("text", "")), "type": m.get("fact_type")}
                 for m in targets[:5]
             ],
-            "note": "Dry-run only. Call curate_apply(plan_id) to invalidate.",
+            "note": (
+                "Dry-run only. Show the owner invalidate vs left-untouched, wait for explicit "
+                "confirmation, then call curate_apply(plan_id)."
+            ),
         }
 
     def list_plans(self, limit: int = 50) -> dict[str, Any]:
@@ -244,19 +293,30 @@ class Curator:
         plan = self.journal.get_plan(plan_id)
         if not plan:
             return {"ok": False, "error": f"Unknown plan_id: {plan_id}", "kind": "not_found"}
+        payload = plan.get("payload") or {}
+        skipped_list = list(payload.get("skipped") or [])
+        why_by_id = {
+            str(s.get("id")): str(s.get("why") or "")
+            for s in skipped_list
+            if isinstance(s, dict) and s.get("id")
+        }
         items = []
         for it in plan.get("items") or []:
             kept = bool(it.get("kept"))
-            items.append(
-                {
-                    "id": it["memory_id"],
-                    "excerpt": it.get("text_excerpt") or "",
-                    "type": it.get("fact_type") or "",
-                    "previous_state": it.get("previous_state") or "valid",
-                    "kept": kept,
-                    "locked": kept,
-                }
-            )
+            mid = it["memory_id"]
+            why = why_by_id.get(mid) or ""
+            row = {
+                "id": mid,
+                "excerpt": it.get("text_excerpt") or "",
+                "type": it.get("fact_type") or "",
+                "previous_state": it.get("previous_state") or "valid",
+                "kept": kept,
+                "locked": kept,
+            }
+            if why:
+                row["left_untouched"] = True
+                row["why"] = why
+            items.append(row)
         return {
             "ok": True,
             "plan_id": plan["plan_id"],
@@ -266,6 +326,12 @@ class Curator:
             "status": plan["status"],
             "count": len(items),
             "items": items,
+            "skipped": skipped_list,
+            "left_untouched": [
+                {"id": str(s.get("id")), "why": str(s.get("why") or "")}
+                for s in skipped_list
+                if isinstance(s, dict) and s.get("id")
+            ],
             "apply_events": self.journal.apply_events_for_plan(plan_id),
         }
 

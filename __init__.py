@@ -157,6 +157,14 @@ def register(ctx) -> None:
         description="Scan / plan / apply / restore Hindsight memory curation",
         args_hint="scan|plan|apply|restore|history …",
     )
+
+    skills_dir = Path(__file__).resolve().parent / "skills"
+    if skills_dir.is_dir():
+        for child in sorted(skills_dir.iterdir()):
+            skill_md = child / "SKILL.md"
+            if child.is_dir() and skill_md.exists():
+                ctx.register_skill(child.name, skill_md)
+
     logger.info(
         "hindsight-curator registered (api_url=%s bank_id=%s)",
         _settings_from_ctx(ctx).get("api_url"),

@@ -281,7 +281,7 @@ function Page({ ctx }) {
                   checked: !!selected[item.id],
                   onToggle,
                   result: results[item.id],
-                }))))))
+                })))))))
 }
 
 export default {
